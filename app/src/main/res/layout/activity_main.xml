@@ -10,47 +10,39 @@
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginEnd="16dp"
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toTopOf="@+id/navigation"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="1.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/button_control_forward"
+            <Switch
+                android:id="@+id/switch_connect"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Forward" />
+                android:layout_height="match_parent"
+                android:text="Connection   " />
 
-            <Button
-                android:id="@+id/button_control_backward"
+            <Space
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Backword" />
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
 
-            <Button
-                android:id="@+id/button_control_left"
+            <Switch
+                android:id="@+id/switch_transfer"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Left" />
+                android:layout_height="match_parent"
+                android:text="Transmission   " />
 
-            <Button
-                android:id="@+id/button_control_right"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Right" />
         </LinearLayout>
 
         <LinearLayout
@@ -58,32 +50,105 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/button_connect"
+            <Space
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Connect" />
+                android:layout_weight="1" />
 
-            <Button
-                android:id="@+id/button_clear"
+            <RadioGroup
+                android:id="@+id/radioGroupB"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/radioButton_bstop"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:checked="true"
+                    android:text="Stop" />
+
+                <RadioButton
+                    android:id="@+id/radioButton_bforward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Forward" />
+
+                <RadioButton
+                    android:id="@+id/radioButton_bbackward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Backward" />
+
+            </RadioGroup>
+
+            <Space
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Clear" />
+                android:layout_weight="1" />
+
+            <RadioGroup
+                android:id="@+id/radioGroupC"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/radioButton_stop"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:checked="true"
+                    android:text="Stop" />
+
+                <RadioButton
+                    android:id="@+id/radioButton_forward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Forward" />
+
+                <RadioButton
+                    android:id="@+id/radioButton_left"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Left" />
+
+                <RadioButton
+                    android:id="@+id/radioButton_right"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Right" />
+
+                <RadioButton
+                    android:id="@+id/radioButton_backward"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Backward" />
+
+            </RadioGroup>
+
+            <Space
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
         </LinearLayout>
 
-        <Switch
-            android:id="@+id/switch_transfer"
+        <Button
+            android:id="@+id/button_clear"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Transfer" />
+            android:text="Clear" />
 
         <TextView
             android:id="@+id/textView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:text="Bluetooth Packets" />
+            android:text="Messages" />
 
     </LinearLayout>
 

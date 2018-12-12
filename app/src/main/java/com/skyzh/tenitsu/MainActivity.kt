@@ -1,37 +1,31 @@
 package com.skyzh.tenitsu
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import android.location.LocationProvider
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.support.design.widget.BottomNavigationView
+import android.support.v4.app.ActivityCompat
+import android.support.v4.content.ContextCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.Button
+import android.widget.RadioGroup
+import android.widget.Switch
 import com.polidea.rxandroidble2.NotificationSetupMode
-import io.reactivex.android.schedulers.AndroidSchedulers
-import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlin.concurrent.fixedRateTimer
-import kotlin.concurrent.timerTask
 import com.polidea.rxandroidble2.RxBleClient
 import com.polidea.rxandroidble2.RxBleConnection
 import com.polidea.rxandroidble2.RxBleDevice
-import com.polidea.rxandroidble2.internal.RxBleLog
 import com.polidea.rxandroidble2.scan.ScanSettings
 import io.reactivex.*
-import io.reactivex.disposables.Disposable
-import io.reactivex.rxkotlin.toObservable
+import io.reactivex.rxkotlin.*
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
-
 
 private const val REQUEST_ENABLE_BT = 20
 
@@ -72,7 +66,7 @@ class MainActivity : AppCompatActivity() {
     private fun logToView(message: String) {
         runOnUiThread {
             logs = arrayListOf(message) + logs
-            logs = logs.dropLast(Math.max(logs.size - 20, 0))
+            logs = logs.dropLast(Math.max(logs.size - 15, 0))
             if (logs.isNotEmpty()) textView.text = logs.reduce({ a, b -> a + "\n" + b }) else textView.text = ""
             Log.i("message", message)
         }
@@ -88,13 +82,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun switchTransfer(): Observable<Boolean> {
-        return Observable.create<Boolean> { emitter ->
-            run {
-                switch_transfer.setOnCheckedChangeListener { _, isChecked -> emitter.onNext(isChecked) }
-            }
-        }
+    private fun switchChanged(switch: Switch) = Observable.create<Boolean> { emitter ->
+        emitter.onNext(switch.isChecked)
+        switch.setOnCheckedChangeListener { _, isChecked -> emitter.onNext(isChecked) }
+        emitter.setCancellable { switch.setOnCheckedChangeListener(null) };
     }
+
+
+    private fun radioChanged(radioGroup: RadioGroup) = Observable.create<Int> { emitter ->
+        emitter.onNext(radioGroup.checkedRadioButtonId);
+        radioGroup.setOnCheckedChangeListener { _, checkedId -> emitter.onNext(checkedId) }
+        emitter.setCancellable { radioGroup.setOnCheckedChangeListener(null) };
+    }
+
+    enum class Chassis {
+        Forward, Left, Right, Backward, Stop, None
+    }
+
+    fun driveStatusChanged() = Observable.combineLatest(
+            arrayOf(radioChanged(radioGroupC), radioChanged(radioGroupB)),
+            {
+                arrayOf(when (it[0]) {
+                    radioButton_stop.id -> Chassis.Stop
+                    radioButton_forward.id -> Chassis.Forward
+                    radioButton_left.id -> Chassis.Left
+                    radioButton_right.id -> Chassis.Right
+                    radioButton_backward.id -> Chassis.Backward
+                    else -> Chassis.None
+                }, when (it[1]) {
+                    radioButton_bstop.id -> Chassis.Stop
+                    radioButton_bforward.id -> Chassis.Forward
+                    radioButton_bbackward.id -> Chassis.Backward
+                    else -> Chassis.None
+                })
+            })
+
+    private var transmissionBuilder = TransmissionBuilder()
 
     private val rxBleClient: RxBleClient? by lazy(LazyThreadSafetyMode.NONE) {
         RxBleClient.create(this)
@@ -113,42 +136,98 @@ class MainActivity : AppCompatActivity() {
                 .firstElement()
     }
 
-    fun serial(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> {
-        return characteristic(connection, SerialPortUUID).doOnSuccess { _ -> logToView("connection established") }
-    }
+    fun serial(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> =
+            characteristic(connection, SerialPortUUID).doOnSuccess { _ -> logToView("connection established") }
 
-    fun command(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> {
-        return characteristic(connection, CommandUUID)
-    }
+    fun command(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> =
+            characteristic(connection, CommandUUID)
 
-    fun transmit(device: RxBleDevice) = run {
-        device.establishConnection(false).subscribe { connection ->
-            command(connection)
-                    .toObservable()
-                    // .flatMap { cmd -> connection.writeCharacteristic(cmd, InitialCommand.toByteArray()).toObservable() }
-                    .doOnNext { _ -> logToView("command channel open") }
-                    .flatMap { serial(connection).toObservable() }
-                    .subscribe { serial ->
-                        run {
-                            logToView("transferring in progress...")
-
-                            connection.setupNotification(serial, NotificationSetupMode.COMPAT)
-                                    .doOnNext { _ -> logToView("notification has been set up") }
-                                    .flatMap { notificationObservable -> notificationObservable }
-                                    .subscribe({ bytes -> logToView(bytes.toString(Charset.forName("UTF-8"))) }, Throwable::printStackTrace)
-
-
-                            switchTransfer().switchMap { isChecked ->
-                                if (isChecked) Observable.interval(1, TimeUnit.SECONDS)
-                                else Observable.empty()
-                            }
-
-                                    .switchMap { _ -> connection.writeCharacteristic(serial, "aaa".toByteArray()).toObservable() }
-                                    .subscribe({ d -> logToView("data transferred") }, Throwable::printStackTrace)
-                        }
-                    }
+    fun get_message(data: Array<Chassis>): ByteArray {
+        val l = when (data[0]) {
+            Chassis.Backward -> -1024
+            Chassis.Forward -> 1024
+            Chassis.Stop -> 0
+            Chassis.None -> 0
+            Chassis.Left -> 500
+            Chassis.Right -> -500
         }
+        val r = when (data[0]) {
+            Chassis.Backward -> -1024
+            Chassis.Forward -> 1024
+            Chassis.Stop -> 0
+            Chassis.None -> 0
+            Chassis.Left -> -500
+            Chassis.Right -> 500
+        }
+        val f = when (data[1]) {
+            Chassis.Backward -> -1
+            Chassis.Forward -> 1
+            Chassis.Stop -> 0
+            else -> 0
+        }
+        return transmissionBuilder.build_message(l, r, f)
     }
+
+    fun write_data(connection: RxBleConnection, serial: BluetoothGattCharacteristic, data: Array<Chassis>) = connection.writeCharacteristic(
+            serial, get_message(data)
+    ).toObservable()
+
+    fun hex(data: ByteArray) = data.map { String.format("%02X", it) }.reduceRight { a, b -> a + b }
+
+    fun transmit(device: RxBleDevice) =
+            device.establishConnection(false).flatMap { connection ->
+                serial(connection).toObservable()
+                        .flatMap { serial ->
+                            logToView("transferring in progress...")
+                            runOnUiThread { switch_connect.isEnabled = true }
+
+                            Observable.merge(
+                                    connection.setupNotification(serial, NotificationSetupMode.COMPAT)
+                                            .doOnNext { _ -> logToView("notification has been set up") }
+                                            .flatMap { notificationObservable -> notificationObservable }
+                                            .doOnNext { bytes -> logToView(bytes.toString(Charset.forName("UTF-8"))) }
+
+                                    ,
+                                    switchChanged(switch_transfer).switchMap { isChecked ->
+                                        if (isChecked) Observable.interval(50, TimeUnit.MILLISECONDS).flatMap { driveStatusChanged() }
+                                        else Observable.empty()
+                                    }
+                                            .flatMap { data -> write_data(connection, serial, data) }
+                                            .doOnNext { bytes -> logToView("transferred: ${hex(bytes)}") }
+                            )
+                        }
+            }
+
+    fun do_connect() = switchChanged(switch_connect)
+            .switchMap {
+                when (it) {
+                    true -> {
+                        logToView("Scan started...")
+                        switch_connect.isEnabled = false
+                        mBluetoothAdapter?.startLeScan { _, _, _ -> run {} }
+                        rxBleClient!!.scanBleDevices(ScanSettings.Builder().build())
+                                .distinct { d -> d.bleDevice.macAddress }
+                                .doOnNext { d ->
+                                    logToView("Device found: ${d.bleDevice.name
+                                            ?: d.bleDevice.macAddress}")
+                                }
+                                .filter { d -> if (d.bleDevice.name == null) false else (d.bleDevice.name == "Tennis") }
+                                .firstElement()
+                                .toObservable()
+                                .flatMap { scanResult ->
+                                    val device = scanResult.bleDevice
+                                    runOnUiThread {
+                                        logToView("Bluetooth device found, ready to connect")
+                                    }
+                                    transmit(device)
+                                }
+                    }
+                    false -> {
+                        logToView("disconnected")
+                        Observable.empty()
+                    }
+                }
+            }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -162,38 +241,25 @@ class MainActivity : AppCompatActivity() {
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
         }
 
-        val btn_connect = buttonClick(button_connect)
-                .subscribe { _ ->
-                    run {
-                        button_connect.isEnabled = false
-                        logToView("Scan started...")
-                        mBluetoothAdapter?.startLeScan({ _, _, _ -> {} })
-                        rxBleClient!!.scanBleDevices(ScanSettings.Builder().build())
-                                .distinct { d -> d.bleDevice.macAddress }
-                                .doOnNext { d ->
-                                    logToView("Device found: " + {
-                                        if (d.bleDevice.name != null) d.bleDevice.name else d.bleDevice.macAddress
-                                    }())
-                                }
-                                .filter { d -> if (d.bleDevice.name == null) false else (d.bleDevice.name == "Tennis") }
-                                .firstElement()
-                                .subscribe({ scanResult ->
-                                    val device = scanResult.bleDevice
-                                    runOnUiThread {
-                                        logToView("Bluetooth device found, ready to connect")
-                                    }
-                                    transmit(device)
+        if (
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA), 4)
+        }
 
-                                }, Throwable::printStackTrace)
-                    }
-                }
+        val connect_sub = do_connect().subscribeBy(onError = {
+            runOnUiThread {
+                logToView("error: ${it.message}")
+                switch_connect.isChecked = false
+                switch_connect.isEnabled = true
+                logToView("disconnected")
+            }
+        })
 
-        val btn_clear = buttonClick(button_clear)
-                .subscribe { _ ->
-                    runOnUiThread {
-                        logs = arrayListOf("")
-                        textView.text = ""
-                    }
-                }
+        val btn_sub = buttonClick(button_clear).subscribe { _ ->
+            logs = arrayListOf("")
+            logToView("")
+        }
     }
 }
+
