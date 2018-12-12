@@ -2,19 +2,39 @@ package com.skyzh.tenitsu
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.location.LocationProvider
 import android.os.Bundle
 import android.support.design.widget.BottomNavigationView
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
-import io.reactivex.Single
+import android.widget.Button
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlin.concurrent.fixedRateTimer
+import kotlin.concurrent.timerTask
+import com.polidea.rxandroidble2.RxBleClient
+import com.polidea.rxandroidble2.RxBleConnection
+import com.polidea.rxandroidble2.RxBleDevice
+import com.polidea.rxandroidble2.internal.RxBleLog
+import com.polidea.rxandroidble2.scan.ScanSettings
+import io.reactivex.*
+import io.reactivex.disposables.Disposable
+import io.reactivex.rxkotlin.toObservable
+import java.util.concurrent.TimeUnit
+
 
 private const val REQUEST_ENABLE_BT = 20
 
 class MainActivity : AppCompatActivity() {
+
     /*
 
 
@@ -45,38 +65,55 @@ class MainActivity : AppCompatActivity() {
     private val BluetoothAdapter.isDisabled: Boolean
         get() = !isEnabled
 
-    private fun scanLeDevice(): Single<BluetoothDevice> {
-        return Single.create<BluetoothDevice> { emitter ->
-            run {
-                mBluetoothAdapter?.startLeScan { device, rssi, scanRecord ->
-                    emitter.onSuccess(device)
-                }
-            }
-        }
-    }
-
-    private var logs: String = ""
+    private var logs: List<String> = arrayListOf("")
 
     private fun logToView(message: String) {
-        logs += message
-        textView.text = logs
+        runOnUiThread {
+            logs = arrayListOf(message) + logs
+            logs = logs.dropLast(Math.max(logs.size - 20, 0))
+            if (logs.isNotEmpty()) textView.text = logs.reduce({ a, b -> a + "\n" + b }) else textView.text = ""
+        }
     }
 
-    private fun buttonConnect(): Single<Boolean> {
-        return Single.create<Boolean> { emitter ->
+    private fun buttonClick(button: Button): Observable<Boolean> {
+        return Observable.create<Boolean> { emitter ->
             run {
-                button_connect.setOnClickListener {
-                    emitter.onSuccess(true)
+                button.setOnClickListener {
+                    emitter.onNext(true)
                 }
             }
         }
     }
 
-    private fun buttonClear(): Single<Boolean> {
-        return Single.create<Boolean> { emitter ->
-            run {
-                button_clear.setOnClickListener {
-                    emitter.onSuccess(true);
+    private val rxBleClient: RxBleClient? by lazy(LazyThreadSafetyMode.NONE) {
+        RxBleClient.create(this)
+    }
+
+    val SerialPortUUID = "0000dfb1-0000-1000-8000-00805f9b34fb"
+    val CommandUUID = "0000dfb2-0000-1000-8000-00805f9b34fb"
+    val ModelNumberStringUUID = "00002a24-0000-1000-8000-00805f9b34fb"
+
+    fun serial(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> {
+        return connection.discoverServices().toObservable()
+                .flatMap { services -> services.bluetoothGattServices.toObservable() }
+                .flatMap { service -> service.characteristics.toObservable() }
+                .filter { characteristic -> characteristic.uuid.toString() == SerialPortUUID }
+                .firstElement()
+                .doOnSuccess { _ -> logToView("connection established") }
+    }
+
+    fun transmit(device: RxBleDevice) = run {
+        device.establishConnection(false).subscribe { connection ->
+            val serial_sub = serial(connection).subscribe { serial ->
+                run {
+                    logToView("transferring in progress...")
+                    connection.setupNotification(serial)
+                            .subscribe({ bytes -> logToView(bytes.toString()) }, Throwable::printStackTrace)
+
+                    Observable.interval(1, TimeUnit.SECONDS)
+                            .switchMap { _ -> connection.writeCharacteristic(serial, "aaa".toByteArray()).toObservable() }
+                            .subscribe({ d -> logToView("data transferred") }, Throwable::printStackTrace)
+
                 }
             }
         }
@@ -90,23 +127,42 @@ class MainActivity : AppCompatActivity() {
 
         mBluetoothAdapter?.takeIf { it.isDisabled }?.apply {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
         }
 
-        buttonConnect()
-                .map { d ->
-                    logToView("Scan started...")
-                    button_connect.isEnabled = false
-                    d
-                }
-                .flatMap { scanLeDevice() }
-                .map { device -> device.name }
-                .subscribe { device -> logToView("Found device: " + device) }
+        val btn_connect = buttonClick(button_connect)
+                .subscribe { _ ->
+                    run {
+                        button_connect.isEnabled = false
+                        logToView("Scan started...")
+                        mBluetoothAdapter?.startLeScan({ _, _, _ -> {} })
+                        rxBleClient!!.scanBleDevices(ScanSettings.Builder().build())
+                                .distinct { d -> d.bleDevice.macAddress }
+                                .doOnNext { d ->
+                                    logToView("Device found: " + {
+                                        if (d.bleDevice.name != null) d.bleDevice.name else d.bleDevice.macAddress
+                                    }())
+                                }
+                                .filter { d -> if (d.bleDevice.name == null) false else (d.bleDevice.name == "Tennis") }
+                                .firstElement()
+                                .subscribe({ scanResult ->
+                                    val device = scanResult.bleDevice
+                                    runOnUiThread {
+                                        logToView("Bluetooth device found, ready to connect")
+                                    }
+                                    transmit(device)
 
-        buttonClear()
-                .subscribe { d ->
-                    logs = ""
-                    textView.text = ""
+                                }, Throwable::printStackTrace)
+                    }
+                }
+
+        val btn_clear = buttonClick(button_clear)
+                .subscribe { _ ->
+                    runOnUiThread {
+                        logs = arrayListOf("")
+                        textView.text = ""
+                    }
                 }
     }
 }
