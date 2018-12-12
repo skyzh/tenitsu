@@ -15,6 +15,7 @@ import android.support.design.widget.BottomNavigationView
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.Button
+import com.polidea.rxandroidble2.NotificationSetupMode
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_main.*
@@ -28,6 +29,7 @@ import com.polidea.rxandroidble2.scan.ScanSettings
 import io.reactivex.*
 import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.toObservable
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
 
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
             logs = arrayListOf(message) + logs
             logs = logs.dropLast(Math.max(logs.size - 20, 0))
             if (logs.isNotEmpty()) textView.text = logs.reduce({ a, b -> a + "\n" + b }) else textView.text = ""
+            Log.i("message", message)
         }
     }
 
@@ -85,6 +88,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun switchTransfer(): Observable<Boolean> {
+        return Observable.create<Boolean> { emitter ->
+            run {
+                switch_transfer.setOnCheckedChangeListener { _, isChecked -> emitter.onNext(isChecked) }
+            }
+        }
+    }
+
     private val rxBleClient: RxBleClient? by lazy(LazyThreadSafetyMode.NONE) {
         RxBleClient.create(this)
     }
@@ -92,30 +103,50 @@ class MainActivity : AppCompatActivity() {
     val SerialPortUUID = "0000dfb1-0000-1000-8000-00805f9b34fb"
     val CommandUUID = "0000dfb2-0000-1000-8000-00805f9b34fb"
     val ModelNumberStringUUID = "00002a24-0000-1000-8000-00805f9b34fb"
+    val InitialCommand = "AT+PASSWOR=DFRobot\r\nAT+CURRUART=115200\r\n"
 
-    fun serial(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> {
+    fun characteristic(connection: RxBleConnection, uuid: String): Maybe<BluetoothGattCharacteristic> {
         return connection.discoverServices().toObservable()
                 .flatMap { services -> services.bluetoothGattServices.toObservable() }
                 .flatMap { service -> service.characteristics.toObservable() }
                 .filter { characteristic -> characteristic.uuid.toString() == SerialPortUUID }
                 .firstElement()
-                .doOnSuccess { _ -> logToView("connection established") }
+    }
+
+    fun serial(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> {
+        return characteristic(connection, SerialPortUUID).doOnSuccess { _ -> logToView("connection established") }
+    }
+
+    fun command(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> {
+        return characteristic(connection, CommandUUID)
     }
 
     fun transmit(device: RxBleDevice) = run {
         device.establishConnection(false).subscribe { connection ->
-            val serial_sub = serial(connection).subscribe { serial ->
-                run {
-                    logToView("transferring in progress...")
-                    connection.setupNotification(serial)
-                            .subscribe({ bytes -> logToView(bytes.toString()) }, Throwable::printStackTrace)
+            command(connection)
+                    .toObservable()
+                    // .flatMap { cmd -> connection.writeCharacteristic(cmd, InitialCommand.toByteArray()).toObservable() }
+                    .doOnNext { _ -> logToView("command channel open") }
+                    .flatMap { serial(connection).toObservable() }
+                    .subscribe { serial ->
+                        run {
+                            logToView("transferring in progress...")
 
-                    Observable.interval(1, TimeUnit.SECONDS)
-                            .switchMap { _ -> connection.writeCharacteristic(serial, "aaa".toByteArray()).toObservable() }
-                            .subscribe({ d -> logToView("data transferred") }, Throwable::printStackTrace)
+                            connection.setupNotification(serial, NotificationSetupMode.COMPAT)
+                                    .doOnNext { _ -> logToView("notification has been set up") }
+                                    .flatMap { notificationObservable -> notificationObservable }
+                                    .subscribe({ bytes -> logToView(bytes.toString(Charset.forName("UTF-8"))) }, Throwable::printStackTrace)
 
-                }
-            }
+
+                            switchTransfer().switchMap { isChecked ->
+                                if (isChecked) Observable.interval(1, TimeUnit.SECONDS)
+                                else Observable.empty()
+                            }
+
+                                    .switchMap { _ -> connection.writeCharacteristic(serial, "aaa".toByteArray()).toObservable() }
+                                    .subscribe({ d -> logToView("data transferred") }, Throwable::printStackTrace)
+                        }
+                    }
         }
     }
 
