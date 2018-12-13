@@ -8,7 +8,7 @@ android {
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.skyzh.tenitsu"
-        minSdkVersion 23
+        minSdkVersion 22
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -34,4 +34,8 @@ dependencies {
     implementation 'io.reactivex.rxjava2:rxandroid:2.1.0'
     implementation 'io.reactivex.rxjava2:rxkotlin:2.3.0'
     implementation "com.polidea.rxandroidble2:rxandroidble:1.7.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.0.1"
+    implementation "org.bytedeco:javacv:1.4.3"
+    implementation "org.bytedeco.javacpp-presets:opencv:3.4.3-1.4.3"
+    implementation 'com.ragnarok.rxcamera:lib:0.0.5'
 }

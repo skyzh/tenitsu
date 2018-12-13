@@ -7,13 +7,25 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Camera
+import android.graphics.ImageFormat
+import android.graphics.Point
+import android.graphics.SurfaceTexture
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.media.ImageReader
 import android.os.Bundle
+import android.os.Handler
+import android.os.HandlerThread
 import android.support.design.widget.BottomNavigationView
 import android.support.v4.app.ActivityCompat
 import android.support.v4.content.ContextCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
+import android.view.Surface
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.RadioGroup
 import android.widget.Switch
 import com.polidea.rxandroidble2.NotificationSetupMode
@@ -22,9 +34,12 @@ import com.polidea.rxandroidble2.RxBleClient
 import com.polidea.rxandroidble2.RxBleConnection
 import com.polidea.rxandroidble2.RxBleDevice
 import com.polidea.rxandroidble2.scan.ScanSettings
+import com.ragnarok.rxcamera.RxCamera
+import com.ragnarok.rxcamera.config.RxCameraConfig
 import io.reactivex.*
 import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.*
+import rx.functions.Func1
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 
@@ -53,6 +68,8 @@ class MainActivity : AppCompatActivity() {
         false
     }
     */
+
+    val transmissionBuilder = TransmissionBuilder()
 
     private val mBluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -118,7 +135,6 @@ class MainActivity : AppCompatActivity() {
                 })
             })
 
-    private var transmissionBuilder = TransmissionBuilder()
 
     private val rxBleClient: RxBleClient? by lazy(LazyThreadSafetyMode.NONE) {
         RxBleClient.create(this)
@@ -199,7 +215,7 @@ class MainActivity : AppCompatActivity() {
                         }
             }
 
-    fun connect() : Disposable {
+    fun connect(): Disposable {
         val sub = switchChanged(switch_connect)
                 .switchMap {
                     when (it) {
@@ -264,6 +280,24 @@ class MainActivity : AppCompatActivity() {
             logs = arrayListOf("")
             logToView("")
         }
+
+        val config = RxCameraConfig.Builder()
+                .useBackCamera()
+                .setAutoFocus(true)
+                .setPreferPreviewFrameRate(15, 30)
+                .setPreferPreviewSize(Point(640, 480), false)
+                .setHandleSurfaceEvent(true)
+                .build();
+
+        
+        val btn_camera = buttonClick(button_camera).subscribe { _ ->
+            RxCamera.open(this, config)
+                    .flatMap { camera -> camera.bindTexture(textureView) }
+                    .flatMap { camera -> camera.startPreview() }
+                    .flatMap { camera -> camera.request().successiveDataRequest() }
+                    .subscribe { d -> d.cameraData }
+        }
+
     }
 }
 

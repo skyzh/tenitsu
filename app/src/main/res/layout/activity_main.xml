@@ -7,6 +7,11 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <TextureView
+        android:id="@+id/textureView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -138,11 +143,26 @@
                 android:layout_weight="1" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/button_clear"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Clear" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_clear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Clear" />
+
+            <Button
+                android:id="@+id/button_camera"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Camera" />
+
+        </LinearLayout>
 
         <TextView
             android:id="@+id/textView"
