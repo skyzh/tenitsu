@@ -36,6 +36,6 @@ dependencies {
     implementation "com.polidea.rxandroidble2:rxandroidble:1.7.1"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.0.1"
     implementation "org.bytedeco:javacv:1.4.3"
-    implementation "org.bytedeco.javacpp-presets:opencv:3.4.3-1.4.3"
-    implementation 'com.ragnarok.rxcamera:lib:0.0.5'
+    implementation "org.bytedeco.javacpp-presets:opencv:3.4.3-1.4.3:android-arm"
+    implementation "org.bytedeco.javacpp-presets:ffmpeg:4.0.2-1.4.3:android-arm"
 }
