@@ -77,8 +77,8 @@ public class CvCameraPreview extends SurfaceView implements SurfaceHolder.Callba
      * of the Surface. They are used when {@link #onMeasure(int, int)}
      * is called.
      */
-    private final float ASPECT_RATIO_W = 16.0f;
-    private final float ASPECT_RATIO_H = 9.0f;
+    private final float ASPECT_RATIO_W = 4.0f;
+    private final float ASPECT_RATIO_H = 3.0f;
 
     /**
      * The maximum dimension (in pixels) of the preview frames that are produced
@@ -87,7 +87,7 @@ public class CvCameraPreview extends SurfaceView implements SurfaceHolder.Callba
      * it and a lower value is required (but the aspect ratio should remain the same).<br />
      * See {@link CvCameraPreview#getBestSize(List, int)} for more information.
      */
-    private final int PREVIEW_MAX_WIDTH = 1920 / 2;
+    private final int PREVIEW_MAX_WIDTH = 800;
 
     /**
      * The maximum dimension (in pixels) of the images produced when a

@@ -153,16 +153,16 @@ class MainActivity : AppCompatActivity() {
             Chassis.Forward -> 255
             Chassis.Stop -> 0
             Chassis.None -> 0
-            Chassis.Left -> -100
-            Chassis.Right -> 100
+            Chassis.Left -> -255
+            Chassis.Right -> 255
         }
         val r = when (data[0]) {
             Chassis.Backward -> -255
             Chassis.Forward -> 255
             Chassis.Stop -> 0
             Chassis.None -> 0
-            Chassis.Left -> 100
-            Chassis.Right -> -100
+            Chassis.Left -> 255
+            Chassis.Right -> -255
         }
         val f = when (data[1]) {
             Chassis.Backward -> -1
@@ -194,7 +194,7 @@ class MainActivity : AppCompatActivity() {
 
                                     ,
                                     switchChanged(switch_transfer).switchMap { isChecked ->
-                                        if (isChecked) Observable.interval(50, TimeUnit.MILLISECONDS).flatMap { driveStatusChanged() }
+                                        if (isChecked) Observable.interval(100, TimeUnit.MILLISECONDS).flatMap { driveStatusChanged() }
                                         else Observable.empty()
                                     }
                                             .flatMap { data -> write_data(connection, serial, data) }
