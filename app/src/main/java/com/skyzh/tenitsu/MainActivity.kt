@@ -149,20 +149,20 @@ class MainActivity : AppCompatActivity() {
 
     fun get_message(data: Array<Chassis>): ByteArray {
         val l = when (data[0]) {
-            Chassis.Backward -> -1024
-            Chassis.Forward -> 1024
+            Chassis.Backward -> -255
+            Chassis.Forward -> 255
             Chassis.Stop -> 0
             Chassis.None -> 0
-            Chassis.Left -> 500
-            Chassis.Right -> -500
+            Chassis.Left -> -100
+            Chassis.Right -> 100
         }
         val r = when (data[0]) {
-            Chassis.Backward -> -1024
-            Chassis.Forward -> 1024
+            Chassis.Backward -> -255
+            Chassis.Forward -> 255
             Chassis.Stop -> 0
             Chassis.None -> 0
-            Chassis.Left -> -500
-            Chassis.Right -> 500
+            Chassis.Left -> 100
+            Chassis.Right -> -100
         }
         val f = when (data[1]) {
             Chassis.Backward -> -1

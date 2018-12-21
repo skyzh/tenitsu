@@ -5,6 +5,49 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+        <SeekBar
+            android:id="@+id/seek_h_0"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="90" />
+        <SeekBar
+            android:id="@+id/seek_h_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="90" />
+        <SeekBar
+            android:id="@+id/seek_s_0"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="90" />
+        <SeekBar
+            android:id="@+id/seek_s_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="90" />
+        <SeekBar
+            android:id="@+id/seek_l_0"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="90" />
+        <SeekBar
+            android:id="@+id/seek_l_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="255"
+            android:progress="90" />
+
+    </LinearLayout>
+
     <com.skyzh.tenitsu.CvCameraPreview
         android:id="@+id/camera_view"
         android:layout_width="match_parent"
