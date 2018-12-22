@@ -9,12 +9,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.graphics.Point
+import android.hardware.SensorManager
 import android.os.Bundle
+import android.os.SystemClock
+import android.support.design.widget.BottomNavigationView
 import android.support.v4.app.ActivityCompat
 import android.support.v4.content.ContextCompat
 import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.RadioGroup
 import android.widget.Switch
 import com.polidea.rxandroidble2.NotificationSetupMode
@@ -28,34 +32,31 @@ import io.reactivex.disposables.Disposable
 import io.reactivex.rxkotlin.*
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
-
+import org.bytedeco.javacpp.opencv_core.*
+import org.bytedeco.javacpp.opencv_imgproc.*
+import kotlin.math.PI
+import org.bytedeco.javacpp.indexer.*
 
 
 private const val REQUEST_ENABLE_BT = 20
 
-class MainActivity : AppCompatActivity() {
-
-    /*
+class MainActivity : AppCompatActivity(), CvCameraPreview.CvCameraViewListener {
 
 
     private val mOnNavigationItemSelectedListener = BottomNavigationView.OnNavigationItemSelectedListener { item ->
         when (item.itemId) {
             R.id.navigation_home -> {
-
+                control_layout.visibility = LinearLayout.VISIBLE
                 return@OnNavigationItemSelectedListener true
             }
             R.id.navigation_dashboard -> {
-
-                return@OnNavigationItemSelectedListener true
-            }
-            R.id.navigation_notifications -> {
-
+                control_layout.visibility = LinearLayout.GONE
                 return@OnNavigationItemSelectedListener true
             }
         }
         false
     }
-    */
+
 
     val transmissionBuilder = TransmissionBuilder()
 
@@ -102,7 +103,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     enum class Chassis {
-        Forward, Left, Right, Backward, Stop, None
+        Forward, Left, Right, Backward, Stop, None, Auto
     }
 
     fun driveStatusChanged() = Observable.combineLatest(
@@ -114,6 +115,7 @@ class MainActivity : AppCompatActivity() {
                     radioButton_left.id -> Chassis.Left
                     radioButton_right.id -> Chassis.Right
                     radioButton_backward.id -> Chassis.Backward
+                    radioButton_auto.id -> Chassis.Auto
                     else -> Chassis.None
                 }, when (it[1]) {
                     radioButton_bstop.id -> Chassis.Stop
@@ -147,7 +149,22 @@ class MainActivity : AppCompatActivity() {
     fun command(connection: RxBleConnection): Maybe<BluetoothGattCharacteristic> =
             characteristic(connection, CommandUUID)
 
+    data class AutoLR(val l: Int, val r: Int)
+
+    var pid = PID(15.0, 0.0, 5.0, -255.0, 255.0)
+
+    fun calc_auto(): AutoLR {
+        val forward = target.forward
+        val rotate = target.angle
+        val pid_result = pid.calc(rotate)
+        val l = pid.clamp(pid_result + forward * 255, -255.0, 255.0)
+        val r = pid.clamp(-pid_result + forward * 255, -255.0, 255.0)
+        return AutoLR(l.toInt(), r.toInt())
+    }
+
     fun get_message(data: Array<Chassis>): ByteArray {
+        val auto = calc_auto()
+        logToView("[CTR] PID ${auto}")
         val l = when (data[0]) {
             Chassis.Backward -> -255
             Chassis.Forward -> 255
@@ -155,6 +172,8 @@ class MainActivity : AppCompatActivity() {
             Chassis.None -> 0
             Chassis.Left -> -255
             Chassis.Right -> 255
+            Chassis.Auto -> auto.l
+            else -> 0
         }
         val r = when (data[0]) {
             Chassis.Backward -> -255
@@ -163,6 +182,8 @@ class MainActivity : AppCompatActivity() {
             Chassis.None -> 0
             Chassis.Left -> 255
             Chassis.Right -> -255
+            Chassis.Auto -> auto.r
+            else -> 0
         }
         val f = when (data[1]) {
             Chassis.Backward -> -1
@@ -268,11 +289,100 @@ class MainActivity : AppCompatActivity() {
             logs = arrayListOf("")
             logToView("")
         }
-
-        val btn_camera = buttonClick(button_camera).subscribe {_ ->
-            startActivity(Intent(this@MainActivity, DetectActivity::class.java))
-        }
+        // autoDrive = AutoDrive(getSystemService(Context.SENSOR_SERVICE) as SensorManager)
+        camera_view.setCvCameraViewListener(this)
+        navigation.setOnNavigationItemSelectedListener(mOnNavigationItemSelectedListener)
     }
+
+    private fun cameraView() = camera_view as CvCameraPreview
+
+    var width: Int = 0
+    var height: Int = 0
+
+    override fun onCameraViewStarted(width: Int, height: Int) {
+        this.width = height
+        this.height = width
+    }
+
+    override fun onCameraViewStopped() {
+    }
+
+    var blurOut: Mat? = null
+    var hslOut: Mat? = null
+    var hMask: Mat? = null
+    var lMask: Mat? = null
+    var sMask: Mat? = null
+    var filteredOut0: Mat? = null
+    var filteredOut1: Mat? = null
+    var filteredOut2: Mat? = null
+    var hslChannels: MatVector? = null
+    var finalOut: Mat? = null
+    var contours: MatVector? = null
+
+    var target: Target = Target(0.0, 0.0)
+    var lst_detect : Long = 0
+
+    override fun onCameraFrame(rgbaMat: Mat): Mat {
+        if (blurOut == null) blurOut = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (hslOut == null) hslOut = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (hMask == null) hMask = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (lMask == null) lMask = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (sMask == null) sMask = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (filteredOut0 == null) filteredOut0 = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (filteredOut1 == null) filteredOut1 = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (filteredOut2 == null) filteredOut2 = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (hslChannels == null) hslChannels = MatVector()
+        if (finalOut == null) finalOut = Mat(rgbaMat.rows(), rgbaMat.cols())
+        if (contours == null) contours = MatVector()
+
+        // filter image
+        blur(rgbaMat, blurOut, Size(1, 1))
+        blurOut!!.convertTo(blurOut, CV_8UC3)
+        cvtColor(blurOut, hslOut, COLOR_BGR2HLS)
+        inRange(hslOut,
+                Mat(1, 1, CV_32SC4, Scalar(32.280575539568343, 0.0, 82.55395683453237, 0.0)),
+                Mat(1, 1, CV_32SC4, Scalar(90.70288624787776, 198.7181663837012, 255.0, 0.0)),
+                filteredOut0)
+        filteredOut0!!.convertTo(filteredOut1, CV_8UC1)
+        rgbaMat.copyTo(finalOut)
+
+        // find tennis ball
+        findContours(filteredOut0, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE)
+
+        var filtered_centers = arrayListOf<Ball>()
+
+        for (i in 0 until contours!!.size()) {
+            val contour = contours!![i]
+            val area = contourArea(contour)
+            val length = arcLength(contour, true)
+            val ratio = 4 * PI * area / length / length
+            //drawContours(finalOut, contours, i.toInt(), Scalar(0.0, 255.0, 0.0, 3.0))
+            if (ratio >= 0.4 && area >= 100) {
+                val rect = boundingRect(contour)
+                rectangle(finalOut, rect, Scalar(0.0, 255.0, 0.0, 3.0))
+                filtered_centers.add(Ball(rect.x() + rect.width() / 2.0, rect.y() + rect.height() / 2.0))
+            }
+        }
+
+        if (filtered_centers.size > 0) {
+            filtered_centers.sortBy({ it.y })
+            filtered_centers.reverse()
+            val half_width = width / 2
+            val target_x = filtered_centers[0].x
+            val ang = Math.acos((target_x - half_width) / half_width) / Math.PI * 180.0
+            target = Target(1.0, (90.0 - ang) / 180 * 72)
+            logToView("[CV] Direction = ${target.angle}")
+            lst_detect = SystemClock.uptimeMillis()
+        } else {
+            if (SystemClock.uptimeMillis() - lst_detect > 1000)
+                target = Target(0.0, 0.0)
+        }
+
+        return finalOut!!
+    }
+
+    data class Ball(val x: Double, val y: Double)
+    data class Target(val forward: Double, val angle: Double)
 
 }
 
