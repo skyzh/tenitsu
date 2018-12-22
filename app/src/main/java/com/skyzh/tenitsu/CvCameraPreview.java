@@ -499,6 +499,10 @@ public class CvCameraPreview extends SurfaceView implements SurfaceHolder.Callba
 
                 parameters.setPreviewFormat(ImageFormat.NV21); // NV21 is the most supported format for preview frames
 
+                parameters.setAutoExposureLock(false);
+
+                parameters.setExposureCompensation(-2);
+
                 List<String> FocusModes = parameters.getSupportedFocusModes();
                 if (FocusModes != null && FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO)) {
                     parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);

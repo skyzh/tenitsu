@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity(), CvCameraPreview.CvCameraViewListener {
                     radioButton_auto.id -> Chassis.Auto
                     else -> Chassis.None
                 }, when (it[1]) {
-                    radioButton_bstop.id -> Chassis.Stop
+                    radioButton_bstop.id -> Chassis.Auto
                     radioButton_bforward.id -> Chassis.Forward
                     radioButton_bbackward.id -> Chassis.Backward
                     else -> Chassis.None
@@ -189,6 +189,7 @@ class MainActivity : AppCompatActivity(), CvCameraPreview.CvCameraViewListener {
             Chassis.Backward -> -1
             Chassis.Forward -> 1
             Chassis.Stop -> 0
+            Chassis.Auto -> if (target.found) 1 else 0
             else -> 0
         }
         return transmissionBuilder.build_message(l, r, f)
@@ -319,7 +320,7 @@ class MainActivity : AppCompatActivity(), CvCameraPreview.CvCameraViewListener {
     var finalOut: Mat? = null
     var contours: MatVector? = null
 
-    var target: Target = Target(0.0, 0.0)
+    var target: Target = Target(0.0, 0.0, false)
     var lst_detect : Long = 0
 
     override fun onCameraFrame(rgbaMat: Mat): Mat {
@@ -339,10 +340,17 @@ class MainActivity : AppCompatActivity(), CvCameraPreview.CvCameraViewListener {
         blur(rgbaMat, blurOut, Size(1, 1))
         blurOut!!.convertTo(blurOut, CV_8UC3)
         cvtColor(blurOut, hslOut, COLOR_BGR2HLS)
-        inRange(hslOut,
-                Mat(1, 1, CV_32SC4, Scalar(32.280575539568343, 0.0, 82.55395683453237, 0.0)),
-                Mat(1, 1, CV_32SC4, Scalar(90.70288624787776, 198.7181663837012, 255.0, 0.0)),
-                filteredOut0)
+        if (switch_outdoor.isChecked) {
+            inRange(hslOut,
+                    Mat(1, 1, CV_32SC4, Scalar(0.0, 149.0, 0.0, 0.0)),
+                    Mat(1, 1, CV_32SC4, Scalar(255.0, 255.0, 255.0, 0.0)),
+                    filteredOut0)
+        } else {
+            inRange(hslOut,
+                    Mat(1, 1, CV_32SC4, Scalar(32.280575539568343, 0.0, 82.55395683453237, 0.0)),
+                    Mat(1, 1, CV_32SC4, Scalar(90.70288624787776, 198.7181663837012, 255.0, 0.0)),
+                    filteredOut0)
+        }
         filteredOut0!!.convertTo(filteredOut1, CV_8UC1)
         rgbaMat.copyTo(finalOut)
 
@@ -370,19 +378,19 @@ class MainActivity : AppCompatActivity(), CvCameraPreview.CvCameraViewListener {
             val half_width = width / 2
             val target_x = filtered_centers[0].x
             val ang = Math.acos((target_x - half_width) / half_width) / Math.PI * 180.0
-            target = Target(1.0, (90.0 - ang) / 180 * 72)
+            target = Target(1.0, (90.0 - ang) / 180 * 72, true)
             logToView("[CV] Direction = ${target.angle}")
             lst_detect = SystemClock.uptimeMillis()
         } else {
-            if (SystemClock.uptimeMillis() - lst_detect > 1000)
-                target = Target(0.0, 0.0)
+            if (SystemClock.uptimeMillis() - lst_detect > 2000)
+                target = Target(0.0, 0.0, false)
         }
 
         return finalOut!!
     }
 
     data class Ball(val x: Double, val y: Double)
-    data class Target(val forward: Double, val angle: Double)
+    data class Target(val forward: Double, val angle: Double, val found: Boolean)
 
 }
 
